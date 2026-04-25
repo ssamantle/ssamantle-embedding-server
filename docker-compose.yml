@@ -1,0 +1,29 @@
+version: "3.0"
+services:
+  server:
+    image: ssamantle-embedding-server:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssamantle-embedding-server-app
+    ports:
+      - 8080:8080
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./app
+          target: /app/app
+          ignore:
+            - docs/
+            - tests/
+        - action: rebuild
+          path: uv.lock
+    restart: unless-stopped

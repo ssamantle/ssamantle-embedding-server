@@ -1,0 +1,19 @@
+# Ignore everything by default.
+*
+
+# Keep Docker build inputs.
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!README.md
+
+# Keep application source.
+!app/
+!app/**
+
+# Exclude generated Python caches inside allowed directories.
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
