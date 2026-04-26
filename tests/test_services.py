@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import app.services as services
+from app.providers.base import EmbeddingProvider
 from app.providers.fasttext import FastTextModelLoadError, FastTextOOVError
 from app.services import (
     EmbeddingInferenceError,
@@ -13,7 +14,7 @@ from app.services import (
 )
 
 
-class EchoProvider:
+class EchoProvider(EmbeddingProvider):
     def __init__(self) -> None:
         self.last_inputs: list[str] | None = None
 
@@ -22,12 +23,12 @@ class EchoProvider:
         return np.array([[1.0, 2.0]], dtype=np.float64)
 
 
-class OOVProvider:
+class OOVProvider(EmbeddingProvider):
     def embed(self, texts: list[str]) -> np.ndarray:
         raise FastTextOOVError(f"Word is out-of-vocabulary: '{texts[0]}'")
 
 
-class RankProvider:
+class RankProvider(EmbeddingProvider):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.rank_inputs: tuple[str, str] | None = None
