@@ -72,6 +72,8 @@ EMBEDDING_MODEL_PATH
 
 ## 개발
 
+기여를 위한 개발 환경 설정과 커밋 전 검사 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
+
 로컬 테스트는 `uv`를 사용합니다.
 
 ```bash
