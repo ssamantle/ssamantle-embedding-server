@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+from time import perf_counter
 from typing import Annotated
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.providers.base import EmbeddingModelLoadError
 from app.services import (
@@ -36,6 +37,17 @@ class SimilarityRankResponse(BaseModel):
 class WordDetailResponse(BaseModel):
     word: str
     embedding: list[float]
+    elapsed_time_ms: float = Field(
+        description="요청 처리에 걸린 시간입니다. 단위는 밀리초입니다.",
+        ge=0,
+    )
+
+
+class WordSimilarityResponse(SimilarityRankResponse):
+    elapsed_time_ms: float = Field(
+        description="요청 처리에 걸린 시간입니다. 단위는 밀리초입니다.",
+        ge=0,
+    )
 
 
 class NthSimilarWordResponse(BaseModel):
@@ -44,6 +56,10 @@ class NthSimilarWordResponse(BaseModel):
     word: str
     similarity: float
     vocabulary_size: int
+
+
+def _elapsed_time_ms(started_at: float) -> float:
+    return (perf_counter() - started_at) * 1000
 
 
 def get_embedding_service() -> EmbeddingService:
@@ -317,6 +333,7 @@ def get_word_detail(
     ],
     service: EmbeddingService = Depends(get_embedding_service),
 ) -> WordDetailResponse:
+    started_at = perf_counter()
     try:
         embeddings = service.generate_embeddings([word])
     except EmbeddingInputError as exc:
@@ -330,12 +347,16 @@ def get_word_detail(
             status_code=HTTPStatus.BAD_GATEWAY, detail=str(exc)
         ) from exc
 
-    return WordDetailResponse(word=word, embedding=embeddings[0].tolist())
+    return WordDetailResponse(
+        word=word,
+        embedding=embeddings[0].tolist(),
+        elapsed_time_ms=_elapsed_time_ms(started_at),
+    )
 
 
 @router.get(
     "/word/{word}/similarity",
-    response_model=SimilarityRankResponse,
+    response_model=WordSimilarityResponse,
     tags=["words"],
     summary="단어 유사도 조회",
     description=(
@@ -378,7 +399,8 @@ def get_word_similarity(
         Query(description="조회할 유사도 순위입니다. 1부터 시작합니다."),
     ] = None,
     service: EmbeddingService = Depends(get_embedding_service),
-) -> SimilarityRankResponse:
+) -> WordSimilarityResponse:
+    started_at = perf_counter()
     if (by_word is None and by_rank is None) or (
         by_word is not None and by_rank is not None
     ):
@@ -393,23 +415,25 @@ def get_word_similarity(
                 base_word=word,
                 compared_word=by_word,
             )
-            return SimilarityRankResponse(
+            return WordSimilarityResponse(
                 base_word=result.base_word,
                 compared_word=result.compared_word,
                 rank=result.rank,
                 similarity=result.similarity,
                 vocabulary_size=result.vocabulary_size,
+                elapsed_time_ms=_elapsed_time_ms(started_at),
             )
 
         if by_rank is None:
             raise AssertionError("by_rank must be provided when by_word is absent.")
         result = service.find_nth_similar_word(base_word=word, rank=by_rank)
-        return SimilarityRankResponse(
+        return WordSimilarityResponse(
             base_word=result.base_word,
             compared_word=result.word,
             rank=result.rank,
             similarity=result.similarity,
             vocabulary_size=result.vocabulary_size,
+            elapsed_time_ms=_elapsed_time_ms(started_at),
         )
     except EmbeddingInputError as exc:
         raise HTTPException(

@@ -76,6 +76,13 @@ def _override_service(service: StubService) -> None:
     app.dependency_overrides[route.get_embedding_service] = lambda: service
 
 
+def _pop_elapsed_time_ms(payload: dict[str, object]) -> float:
+    elapsed_time_ms = payload.pop("elapsed_time_ms")
+    assert isinstance(elapsed_time_ms, float)
+    assert elapsed_time_ms >= 0
+    return elapsed_time_ms
+
+
 def test_root_health_returns_ok() -> None:
     app.dependency_overrides.clear()
 
@@ -139,7 +146,9 @@ def test_get_word_detail_success_returns_embedding() -> None:
         response = client.get("/api/v1/word/hello")
 
     assert response.status_code == HTTPStatus.OK
-    assert response.json() == {"word": "hello", "embedding": [1.0, 2.0, 3.0]}
+    payload = response.json()
+    _pop_elapsed_time_ms(payload)
+    assert payload == {"word": "hello", "embedding": [1.0, 2.0, 3.0]}
     assert service.texts == ["hello"]
     app.dependency_overrides.clear()
 
@@ -411,7 +420,9 @@ def test_get_word_similarity_by_word_returns_similarity_rank() -> None:
         response = client.get("/api/v1/word/king/similarity?by_word=queen")
 
     assert response.status_code == HTTPStatus.OK
-    assert response.json() == {
+    payload = response.json()
+    _pop_elapsed_time_ms(payload)
+    assert payload == {
         "base_word": "king",
         "compared_word": "queen",
         "rank": 12,
@@ -439,7 +450,9 @@ def test_get_word_similarity_by_rank_returns_nth_similar_word() -> None:
         response = client.get("/api/v1/word/apple/similarity?by_rank=3")
 
     assert response.status_code == HTTPStatus.OK
-    assert response.json() == {
+    payload = response.json()
+    _pop_elapsed_time_ms(payload)
+    assert payload == {
         "base_word": "apple",
         "compared_word": "fruit",
         "rank": 3,
