@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from time import perf_counter
 
@@ -39,6 +40,15 @@ class EmbeddingNotFoundError(EmbeddingServiceError):
 
 class EmbeddingInferenceError(EmbeddingServiceError):
     """Raised when provider inference fails."""
+
+
+@dataclass(frozen=True)
+class SimilarityRankResult:
+    base_word: str
+    compared_word: str
+    rank: int
+    similarity: float
+    vocabulary_size: int
 
 
 def _resolve_provider_name() -> str:
@@ -109,6 +119,59 @@ class EmbeddingService:
             result.shape,
         )
         return result
+
+    def calculate_similarity_rank(
+        self,
+        base_word: str,
+        compared_word: str,
+    ) -> SimilarityRankResult:
+        normalized_words = self._normalize_or_raise([base_word, compared_word])
+        normalized_base_word = normalized_words[0]
+        normalized_compared_word = normalized_words[1]
+
+        ranker = getattr(self._provider, "similarity_rank", None)
+        if ranker is None:
+            raise EmbeddingInferenceError(
+                "Provider does not support similarity rank calculation."
+            )
+
+        started_at = perf_counter()
+        logger.info("Calculating similarity rank")
+        try:
+            rank, similarity, vocabulary_size = ranker(
+                normalized_base_word,
+                normalized_compared_word,
+            )
+        except FastTextOOVError as exc:
+            logger.warning(
+                "Similarity rank failed because a token is out of vocabulary"
+            )
+            raise EmbeddingNotFoundError(str(exc)) from exc
+        except (FastTextProviderError, Word2VecProviderNotImplementedError) as exc:
+            logger.exception(
+                "Embedding provider failed during similarity rank calculation"
+            )
+            raise EmbeddingInferenceError(str(exc)) from exc
+        except Exception as exc:
+            logger.exception("Unexpected similarity rank provider error")
+            raise EmbeddingInferenceError(
+                "Failed to calculate similarity rank."
+            ) from exc
+
+        elapsed = perf_counter() - started_at
+        logger.info(
+            "Calculated similarity rank in %.4fs rank=%s vocabulary_size=%s",
+            elapsed,
+            rank,
+            vocabulary_size,
+        )
+        return SimilarityRankResult(
+            base_word=normalized_base_word,
+            compared_word=normalized_compared_word,
+            rank=int(rank),
+            similarity=float(similarity),
+            vocabulary_size=int(vocabulary_size),
+        )
 
     def assemble_response(self, embeddings: np.ndarray) -> EmbeddingResponseDTO:
         """Build API response DTO and convert to list only at serialization boundary."""

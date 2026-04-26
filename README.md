@@ -29,6 +29,7 @@ http://localhost:8080/redoc
 GET /health
 GET /api/v1/embedding/{word}
 GET /api/v1/similarity/{word1}/{word2}
+GET /api/v1/similarity-rank/{base_word}/{compared_word}
 ```
 
 예시:
@@ -37,6 +38,7 @@ GET /api/v1/similarity/{word1}/{word2}
 curl http://localhost:8080/health
 curl http://localhost:8080/api/v1/embedding/사과
 curl http://localhost:8080/api/v1/similarity/사과/배
+curl http://localhost:8080/api/v1/similarity-rank/사과/배
 ```
 
 ## 실행

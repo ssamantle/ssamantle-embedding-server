@@ -147,6 +147,29 @@ class FastTextProvider(EmbeddingProvider):
         score = float(np.dot(vec1, vec2) / denominator)
         return score
 
+    def similarity_rank(
+        self,
+        base_word: str,
+        compared_word: str,
+    ) -> tuple[int, float, int]:
+        base_token = base_word.strip()
+        compared_token = compared_word.strip()
+        self._require_in_vocab(base_token)
+        self._require_in_vocab(compared_token)
+
+        started_at = perf_counter()
+        rank = int(self._model.rank(base_token, compared_token))
+        similarity = float(self._model.similarity(base_token, compared_token))
+        vocabulary_size = len(self._model)
+        elapsed = perf_counter() - started_at
+        logger.info(
+            "Calculated FastText similarity rank in %.4fs rank=%s vocabulary_size=%s",
+            elapsed,
+            rank,
+            vocabulary_size,
+        )
+        return rank, similarity, vocabulary_size
+
     def embed(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.empty((0, self._model.vector_size), dtype=np.float32)
