@@ -1,0 +1,13 @@
+import logging
+
+
+def configure_logger() -> None:
+    """Configure root logging once for the application."""
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        return
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+    )
