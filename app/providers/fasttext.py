@@ -26,6 +26,10 @@ class FastTextOOVError(FastTextProviderError):
     """Raised when a token is out-of-vocabulary."""
 
 
+class FastTextRankError(FastTextProviderError):
+    """Raised when a similarity rank is outside the vocabulary range."""
+
+
 class FastTextProvider(EmbeddingProvider):
     """FastText embedding provider backed by gensim KeyedVectors."""
 
@@ -169,6 +173,27 @@ class FastTextProvider(EmbeddingProvider):
             vocabulary_size,
         )
         return rank, similarity, vocabulary_size
+
+    def nth_similar_word(self, base_word: str, rank: int) -> tuple[str, float, int]:
+        base_token = base_word.strip()
+        self._require_in_vocab(base_token)
+
+        vocabulary_size = len(self._model)
+        if rank > vocabulary_size:
+            raise FastTextRankError(
+                f"Rank must be less than or equal to vocabulary size: {vocabulary_size}"
+            )
+
+        started_at = perf_counter()
+        word, similarity = self._model.most_similar(base_token, topn=rank)[-1]
+        elapsed = perf_counter() - started_at
+        logger.info(
+            "Found FastText nth similar word in %.4fs rank=%s vocabulary_size=%s",
+            elapsed,
+            rank,
+            vocabulary_size,
+        )
+        return str(word), float(similarity), vocabulary_size
 
     def embed(self, texts: list[str]) -> np.ndarray:
         if not texts:

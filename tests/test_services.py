@@ -5,11 +5,16 @@ import pytest
 
 import app.services as services
 from app.providers.base import EmbeddingProvider
-from app.providers.fasttext import FastTextModelLoadError, FastTextOOVError
+from app.providers.fasttext import (
+    FastTextModelLoadError,
+    FastTextOOVError,
+    FastTextRankError,
+)
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
     EmbeddingNotFoundError,
+    EmbeddingRankError,
     EmbeddingService,
 )
 
@@ -32,6 +37,7 @@ class RankProvider(EmbeddingProvider):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.rank_inputs: tuple[str, str] | None = None
+        self.nth_inputs: tuple[str, int] | None = None
 
     def embed(self, texts: list[str]) -> np.ndarray:
         return np.array([[1.0, 2.0]], dtype=np.float32)
@@ -43,6 +49,12 @@ class RankProvider(EmbeddingProvider):
         if self.error is not None:
             raise self.error
         return 3, 0.5, 10
+
+    def nth_similar_word(self, base_word: str, rank: int) -> tuple[str, float, int]:
+        self.nth_inputs = (base_word, rank)
+        if self.error is not None:
+            raise self.error
+        return "similar", 0.75, 10
 
 
 def test_generate_embeddings_normalizes_input_and_returns_float32() -> None:
@@ -101,6 +113,50 @@ def test_calculate_similarity_rank_unsupported_provider_raises_inference_error()
 
     with pytest.raises(EmbeddingInferenceError, match="does not support"):
         service.calculate_similarity_rank("base", "compared")
+
+
+def test_find_nth_similar_word_normalizes_input_and_returns_result() -> None:
+    provider = RankProvider()
+    service = EmbeddingService(provider=provider)
+
+    result = service.find_nth_similar_word("  base  ", 2)
+
+    assert provider.nth_inputs == ("base", 2)
+    assert result.base_word == "base"
+    assert result.rank == 2
+    assert result.word == "similar"
+    assert result.similarity == 0.75
+    assert result.vocabulary_size == 10
+
+
+def test_find_nth_similar_word_invalid_rank_raises_rank_error() -> None:
+    service = EmbeddingService(provider=RankProvider())
+
+    with pytest.raises(EmbeddingRankError, match="greater than or equal to 1"):
+        service.find_nth_similar_word("base", 0)
+
+
+def test_find_nth_similar_word_oov_raises_not_found_error() -> None:
+    provider = RankProvider(error=FastTextOOVError("Word is out-of-vocabulary: 'base'"))
+    service = EmbeddingService(provider=provider)
+
+    with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
+        service.find_nth_similar_word("base", 1)
+
+
+def test_find_nth_similar_word_out_of_range_rank_raises_rank_error() -> None:
+    provider = RankProvider(error=FastTextRankError("Rank exceeds vocabulary size."))
+    service = EmbeddingService(provider=provider)
+
+    with pytest.raises(EmbeddingRankError, match="Rank exceeds"):
+        service.find_nth_similar_word("base", 11)
+
+
+def test_find_nth_similar_word_unsupported_provider_raises_inference_error() -> None:
+    service = EmbeddingService(provider=EchoProvider())
+
+    with pytest.raises(EmbeddingInferenceError, match="does not support"):
+        service.find_nth_similar_word("base", 1)
 
 
 def test_get_embedding_provider_propagates_model_load_failure(

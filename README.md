@@ -27,19 +27,21 @@ http://localhost:8080/redoc
 
 ```http
 GET /health
-GET /api/v1/embedding/{word}
-GET /api/v1/similarity/{word1}/{word2}
-GET /api/v1/similarity-rank/{base_word}/{compared_word}
+GET /api/v1/word/{word}
+GET /api/v1/word/{word}/similarity?by_word={by_word}
+GET /api/v1/word/{word}/similarity?by_rank={by_rank}
 ```
 
 예시:
 
 ```bash
 curl http://localhost:8080/health
-curl http://localhost:8080/api/v1/embedding/사과
-curl http://localhost:8080/api/v1/similarity/사과/배
-curl http://localhost:8080/api/v1/similarity-rank/사과/배
+curl http://localhost:8080/api/v1/word/사과
+curl "http://localhost:8080/api/v1/word/사과/similarity?by_word=배"
+curl "http://localhost:8080/api/v1/word/사과/similarity?by_rank=10"
 ```
+
+이전 엔드포인트인 `/api/v1/embedding/{word}`, `/api/v1/similarity/{word1}/{word2}`, `/api/v1/similarity-rank/{base_word}/{compared_word}`, `/api/v1/similar-words/{base_word}/rank/{rank}`는 deprecated 상태입니다.
 
 ## 실행
 
