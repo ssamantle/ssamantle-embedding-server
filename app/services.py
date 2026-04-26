@@ -10,13 +10,10 @@ import numpy as np
 
 from app.core.settings import settings
 from app.dto import EmbeddingResponseDTO
-from app.providers.base import EmbeddingProvider
-from app.providers.fasttext import (
-    FastTextOOVError,
-    FastTextProvider,
-    FastTextProviderError,
-    FastTextRankError,
-)
+from app.providers.base import EmbeddingOOVError as ProviderOOVError
+from app.providers.base import EmbeddingProvider, EmbeddingProviderError
+from app.providers.base import EmbeddingRankError as ProviderRankError
+from app.providers.fasttext import FastTextProvider
 from app.providers.word2vec import Word2VecProvider, Word2VecProviderNotImplementedError
 from app.utils import InputNormalizationError, normalize_texts
 
@@ -101,12 +98,12 @@ class EmbeddingService:
 
         try:
             embeddings = self._provider.embed(normalized_texts)
-        except FastTextOOVError as exc:
+        except ProviderOOVError as exc:
             logger.warning(
                 "Embedding lookup failed because a token is out of vocabulary"
             )
             raise EmbeddingNotFoundError(str(exc)) from exc
-        except (FastTextProviderError, Word2VecProviderNotImplementedError) as exc:
+        except (EmbeddingProviderError, Word2VecProviderNotImplementedError) as exc:
             logger.exception("Embedding provider failed during inference")
             raise EmbeddingInferenceError(str(exc)) from exc
         except Exception as exc:  # defensive mapping for unforeseen provider errors
@@ -156,12 +153,12 @@ class EmbeddingService:
                 normalized_base_word,
                 normalized_compared_word,
             )
-        except FastTextOOVError as exc:
+        except ProviderOOVError as exc:
             logger.warning(
                 "Similarity rank failed because a token is out of vocabulary"
             )
             raise EmbeddingNotFoundError(str(exc)) from exc
-        except (FastTextProviderError, Word2VecProviderNotImplementedError) as exc:
+        except (EmbeddingProviderError, Word2VecProviderNotImplementedError) as exc:
             logger.exception(
                 "Embedding provider failed during similarity rank calculation"
             )
@@ -207,15 +204,15 @@ class EmbeddingService:
         logger.info("Finding nth similar word rank=%s", rank)
         try:
             word, similarity, vocabulary_size = finder(normalized_base_word, rank)
-        except FastTextOOVError as exc:
+        except ProviderOOVError as exc:
             logger.warning(
                 "Nth similar word lookup failed because base word is out of vocabulary"
             )
             raise EmbeddingNotFoundError(str(exc)) from exc
-        except FastTextRankError as exc:
+        except ProviderRankError as exc:
             logger.warning("Nth similar word lookup failed because rank is invalid")
             raise EmbeddingRankError(str(exc)) from exc
-        except (FastTextProviderError, Word2VecProviderNotImplementedError) as exc:
+        except (EmbeddingProviderError, Word2VecProviderNotImplementedError) as exc:
             logger.exception("Embedding provider failed during nth similar word lookup")
             raise EmbeddingInferenceError(str(exc)) from exc
         except Exception as exc:

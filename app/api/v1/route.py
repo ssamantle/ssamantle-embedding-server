@@ -7,7 +7,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 
-from app.providers.fasttext import FastTextModelLoadError
+from app.providers.base import EmbeddingModelLoadError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -49,7 +49,7 @@ class NthSimilarWordResponse(BaseModel):
 def get_embedding_service() -> EmbeddingService:
     try:
         provider = get_embedding_provider()
-    except FastTextModelLoadError as exc:
+    except EmbeddingModelLoadError as exc:
         raise HTTPException(
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
             detail=str(exc),

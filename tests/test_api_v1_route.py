@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import route
 from app.main import app
-from app.providers.fasttext import FastTextModelLoadError
+from app.providers.base import EmbeddingModelLoadError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -531,7 +531,7 @@ def test_model_loading_failure_in_dependency_returns_500(
     app.dependency_overrides.clear()
 
     def broken_provider():
-        raise FastTextModelLoadError("FastText model file not found")
+        raise EmbeddingModelLoadError("FastText model file not found")
 
     monkeypatch.setattr(route, "get_embedding_provider", broken_provider)
 

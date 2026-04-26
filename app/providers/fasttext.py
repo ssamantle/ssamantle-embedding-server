@@ -9,24 +9,30 @@ from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_vectors
 
 from app.core.settings import settings
-from app.providers.base import EmbeddingProvider
+from app.providers.base import (
+    EmbeddingModelLoadError,
+    EmbeddingOOVError,
+    EmbeddingProvider,
+    EmbeddingProviderError,
+    EmbeddingRankError,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class FastTextProviderError(Exception):
+class FastTextProviderError(EmbeddingProviderError):
     """Base exception for FastText provider failures."""
 
 
-class FastTextModelLoadError(FastTextProviderError):
+class FastTextModelLoadError(FastTextProviderError, EmbeddingModelLoadError):
     """Raised when FastText model loading fails."""
 
 
-class FastTextOOVError(FastTextProviderError):
+class FastTextOOVError(FastTextProviderError, EmbeddingOOVError):
     """Raised when a token is out-of-vocabulary."""
 
 
-class FastTextRankError(FastTextProviderError):
+class FastTextRankError(FastTextProviderError, EmbeddingRankError):
     """Raised when a similarity rank is outside the vocabulary range."""
 
 

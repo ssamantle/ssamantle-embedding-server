@@ -4,12 +4,12 @@ import numpy as np
 import pytest
 
 import app.services as services
-from app.providers.base import EmbeddingProvider
-from app.providers.fasttext import (
-    FastTextModelLoadError,
-    FastTextOOVError,
-    FastTextRankError,
+from app.providers.base import (
+    EmbeddingModelLoadError,
+    EmbeddingOOVError,
+    EmbeddingProvider,
 )
+from app.providers.base import EmbeddingRankError as ProviderRankError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -30,7 +30,7 @@ class EchoProvider(EmbeddingProvider):
 
 class OOVProvider(EmbeddingProvider):
     def embed(self, texts: list[str]) -> np.ndarray:
-        raise FastTextOOVError(f"Word is out-of-vocabulary: '{texts[0]}'")
+        raise EmbeddingOOVError(f"Word is out-of-vocabulary: '{texts[0]}'")
 
 
 class RankProvider(EmbeddingProvider):
@@ -98,7 +98,7 @@ def test_calculate_similarity_rank_normalizes_input_and_returns_result() -> None
 
 def test_calculate_similarity_rank_oov_raises_not_found_error() -> None:
     provider = RankProvider(
-        error=FastTextOOVError("Word is out-of-vocabulary: 'unknown'")
+        error=EmbeddingOOVError("Word is out-of-vocabulary: 'unknown'")
     )
     service = EmbeddingService(provider=provider)
 
@@ -137,7 +137,9 @@ def test_find_nth_similar_word_invalid_rank_raises_rank_error() -> None:
 
 
 def test_find_nth_similar_word_oov_raises_not_found_error() -> None:
-    provider = RankProvider(error=FastTextOOVError("Word is out-of-vocabulary: 'base'"))
+    provider = RankProvider(
+        error=EmbeddingOOVError("Word is out-of-vocabulary: 'base'")
+    )
     service = EmbeddingService(provider=provider)
 
     with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
@@ -145,7 +147,7 @@ def test_find_nth_similar_word_oov_raises_not_found_error() -> None:
 
 
 def test_find_nth_similar_word_out_of_range_rank_raises_rank_error() -> None:
-    provider = RankProvider(error=FastTextRankError("Rank exceeds vocabulary size."))
+    provider = RankProvider(error=ProviderRankError("Rank exceeds vocabulary size."))
     service = EmbeddingService(provider=provider)
 
     with pytest.raises(EmbeddingRankError, match="Rank exceeds"):
@@ -164,13 +166,13 @@ def test_get_embedding_provider_propagates_model_load_failure(
 ) -> None:
     class BrokenFastTextProvider:
         def __init__(self) -> None:
-            raise FastTextModelLoadError("FastText model file not found")
+            raise EmbeddingModelLoadError("FastText model file not found")
 
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fasttext")
     monkeypatch.setattr(services, "FastTextProvider", BrokenFastTextProvider)
     services.get_embedding_provider.cache_clear()
 
-    with pytest.raises(FastTextModelLoadError, match="model file not found"):
+    with pytest.raises(EmbeddingModelLoadError, match="model file not found"):
         services.get_embedding_provider()
 
     services.get_embedding_provider.cache_clear()
