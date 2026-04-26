@@ -8,6 +8,28 @@
 - 사용자에게 보이는 동작이 바뀌면 테스트와 문서를 함께 갱신합니다.
 - API 응답 형식, 상태 코드, 환경변수, Docker 실행 방식이 바뀌면 `README.md`도 확인합니다.
 
+## 개발 환경 설정
+
+개발 의존성을 설치합니다.
+
+```bash
+uv sync --dev
+```
+
+커밋 전 검사를 자동으로 실행하려면 pre-commit hook을 설치합니다.
+
+```bash
+uv run pre-commit install
+```
+
+설치 후 `git commit`을 실행하면 configured hook이 자동으로 실행됩니다. 현재 hook은 `uv run pytest`를 실행하며, 테스트 또는 포맷 검사가 실패하면 커밋이 중단됩니다.
+
+hook을 수동으로 전체 파일에 대해 실행하려면 다음 명령을 사용합니다.
+
+```bash
+uv run pre-commit run --all-files
+```
+
 ## 버전 관리
 
 릴리스에 포함될 변경사항을 만들 때는 `pyproject.toml`의 `[project].version` 갱신 여부를 반드시 검토합니다.

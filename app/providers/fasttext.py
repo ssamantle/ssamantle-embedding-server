@@ -9,21 +9,31 @@ from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_vectors
 
 from app.core.settings import settings
-from app.providers.base import EmbeddingProvider
+from app.providers.base import (
+    EmbeddingModelLoadError,
+    EmbeddingOOVError,
+    EmbeddingProvider,
+    EmbeddingProviderError,
+    EmbeddingRankError,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class FastTextProviderError(Exception):
+class FastTextProviderError(EmbeddingProviderError):
     """Base exception for FastText provider failures."""
 
 
-class FastTextModelLoadError(FastTextProviderError):
+class FastTextModelLoadError(FastTextProviderError, EmbeddingModelLoadError):
     """Raised when FastText model loading fails."""
 
 
-class FastTextOOVError(FastTextProviderError):
+class FastTextOOVError(FastTextProviderError, EmbeddingOOVError):
     """Raised when a token is out-of-vocabulary."""
+
+
+class FastTextRankError(FastTextProviderError, EmbeddingRankError):
+    """Raised when a similarity rank is outside the vocabulary range."""
 
 
 class FastTextProvider(EmbeddingProvider):
@@ -146,6 +156,50 @@ class FastTextProvider(EmbeddingProvider):
             )
         score = float(np.dot(vec1, vec2) / denominator)
         return score
+
+    def similarity_rank(
+        self,
+        base_word: str,
+        compared_word: str,
+    ) -> tuple[int, float, int]:
+        base_token = base_word.strip()
+        compared_token = compared_word.strip()
+        self._require_in_vocab(base_token)
+        self._require_in_vocab(compared_token)
+
+        started_at = perf_counter()
+        rank = int(self._model.rank(base_token, compared_token))
+        similarity = float(self._model.similarity(base_token, compared_token))
+        vocabulary_size = len(self._model)
+        elapsed = perf_counter() - started_at
+        logger.info(
+            "Calculated FastText similarity rank in %.4fs rank=%s vocabulary_size=%s",
+            elapsed,
+            rank,
+            vocabulary_size,
+        )
+        return rank, similarity, vocabulary_size
+
+    def nth_similar_word(self, base_word: str, rank: int) -> tuple[str, float, int]:
+        base_token = base_word.strip()
+        self._require_in_vocab(base_token)
+
+        vocabulary_size = len(self._model)
+        if rank > vocabulary_size:
+            raise FastTextRankError(
+                f"Rank must be less than or equal to vocabulary size: {vocabulary_size}"
+            )
+
+        started_at = perf_counter()
+        word, similarity = self._model.most_similar(base_token, topn=rank)[-1]
+        elapsed = perf_counter() - started_at
+        logger.info(
+            "Found FastText nth similar word in %.4fs rank=%s vocabulary_size=%s",
+            elapsed,
+            rank,
+            vocabulary_size,
+        )
+        return str(word), float(similarity), vocabulary_size
 
     def embed(self, texts: list[str]) -> np.ndarray:
         if not texts:
