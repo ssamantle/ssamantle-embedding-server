@@ -1,3 +1,4 @@
+# ================================================================
 # 1단계: 외부 리소스 다운로드 (Network Stage)
 FROM alpine:latest AS downloader
 
@@ -12,6 +13,7 @@ RUN wget -q https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.ko.300.vec.
 RUN git clone https://github.com/facebookresearch/fastText.git
 
 
+# ================================================================
 # 2단계: 빌드 및 컴파일 (Builder Stage)
 FROM python:3.12-slim AS builder
 
@@ -53,13 +55,13 @@ print(f"Converted FastText vector model in {elapsed:.2f}s", flush=True)
 PY
 
 
+# ================================================================
 # 3단계: 최종 실행 환경 (Runner Stage)
 FROM python:3.12-slim
 
 # .pyc 파일 생성 방지
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV ENV=production
 
 ENV FASTTEXT_MODEL_PATH=/app/data/models/cc.ko.300.kv
 
@@ -80,4 +82,8 @@ USER appuser
 
 # Gunicorn + UvicornWorker 권장이지만 지금은 uvicorn을 사용하도록 함.
 # worker 수는 보통 (2 x CPU 코어 수) + 1 로 설정합니다.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+ENTRYPOINT ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["--workers", "4"]
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"
