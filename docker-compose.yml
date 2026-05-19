@@ -1,29 +1,44 @@
 version: "3.0"
 services:
-  server:
+  embedding_server:
+    container_name: ssamantle-embedding-dev-server
     image: ssamantle-embedding-server:dev
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ssamantle-embedding-server-app
-    ports:
-      - 8080:8080
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     develop:
       watch:
         - action: sync+restart
           path: ./app
           target: /app/app
-          ignore:
-            - docs/
-            - tests/
         - action: rebuild
           path: uv.lock
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    ports: ["${EMBEDDING_SERVER_PORT}:8080"]
+    command: ["--workers", "1"]
+
+  redis:
+    container_name: ssamantle-embedding-dev-redis
+    image: redis:latest
+    ports: ["${REDIS_PORT}:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+
+  postgres:
+    container_name: ssamantle-embedding-dev-postgres
+    image: postgres:latest
+    ports: ["${DB_PORT}:5432"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semantle"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
