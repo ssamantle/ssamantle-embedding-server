@@ -4,18 +4,19 @@ import numpy as np
 import pytest
 
 import app.services as services
+from app.nlp.base import EmbeddingProvider
 from app.nlp.exceptions import (
     EmbeddingModelLoadError,
     EmbeddingOOVError,
 )
 from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
-from app.providers.base import EmbeddingProvider
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
     EmbeddingNotFoundError,
     EmbeddingRankError,
     EmbeddingService,
+    NlpResources,
 )
 
 
@@ -57,9 +58,13 @@ class RankProvider(EmbeddingProvider):
         return "similar", 0.75, 10
 
 
+def _resources(embedding_model: EmbeddingProvider) -> NlpResources:
+    return NlpResources(embedding_model=embedding_model)
+
+
 def test_generate_embeddings_normalizes_input_and_returns_float32() -> None:
     provider = EchoProvider()
-    service = EmbeddingService(provider=provider)
+    service = EmbeddingService(nlp_resources=_resources(provider))
 
     embeddings = service.generate_embeddings(["  token  "])
 
@@ -69,14 +74,14 @@ def test_generate_embeddings_normalizes_input_and_returns_float32() -> None:
 
 
 def test_generate_embeddings_with_blank_text_raises_input_error() -> None:
-    service = EmbeddingService(provider=EchoProvider())
+    service = EmbeddingService(nlp_resources=_resources(EchoProvider()))
 
     with pytest.raises(EmbeddingInputError, match="must not be blank"):
         service.generate_embeddings(["   "])
 
 
 def test_generate_embeddings_oov_raises_not_found_error() -> None:
-    service = EmbeddingService(provider=OOVProvider())
+    service = EmbeddingService(nlp_resources=_resources(OOVProvider()))
 
     with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
         service.generate_embeddings(["unknown"])
@@ -84,7 +89,7 @@ def test_generate_embeddings_oov_raises_not_found_error() -> None:
 
 def test_calculate_similarity_rank_normalizes_input_and_returns_result() -> None:
     provider = RankProvider()
-    service = EmbeddingService(provider=provider)
+    service = EmbeddingService(nlp_resources=_resources(provider))
 
     result = service.calculate_similarity_rank("  base  ", "  compared  ")
 
@@ -100,7 +105,7 @@ def test_calculate_similarity_rank_oov_raises_not_found_error() -> None:
     provider = RankProvider(
         error=EmbeddingOOVError("Word is out-of-vocabulary: 'unknown'")
     )
-    service = EmbeddingService(provider=provider)
+    service = EmbeddingService(nlp_resources=_resources(provider))
 
     with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
         service.calculate_similarity_rank("base", "unknown")
@@ -109,7 +114,7 @@ def test_calculate_similarity_rank_oov_raises_not_found_error() -> None:
 def test_calculate_similarity_rank_unsupported_provider_raises_inference_error() -> (
     None
 ):
-    service = EmbeddingService(provider=EchoProvider())
+    service = EmbeddingService(nlp_resources=_resources(EchoProvider()))
 
     with pytest.raises(EmbeddingInferenceError, match="does not support"):
         service.calculate_similarity_rank("base", "compared")
@@ -117,7 +122,7 @@ def test_calculate_similarity_rank_unsupported_provider_raises_inference_error()
 
 def test_find_nth_similar_word_normalizes_input_and_returns_result() -> None:
     provider = RankProvider()
-    service = EmbeddingService(provider=provider)
+    service = EmbeddingService(nlp_resources=_resources(provider))
 
     result = service.find_nth_similar_word("  base  ", 2)
 
@@ -130,7 +135,7 @@ def test_find_nth_similar_word_normalizes_input_and_returns_result() -> None:
 
 
 def test_find_nth_similar_word_invalid_rank_raises_rank_error() -> None:
-    service = EmbeddingService(provider=RankProvider())
+    service = EmbeddingService(nlp_resources=_resources(RankProvider()))
 
     with pytest.raises(EmbeddingRankError, match="greater than or equal to 1"):
         service.find_nth_similar_word("base", 0)
@@ -140,7 +145,7 @@ def test_find_nth_similar_word_oov_raises_not_found_error() -> None:
     provider = RankProvider(
         error=EmbeddingOOVError("Word is out-of-vocabulary: 'base'")
     )
-    service = EmbeddingService(provider=provider)
+    service = EmbeddingService(nlp_resources=_resources(provider))
 
     with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
         service.find_nth_similar_word("base", 1)
@@ -148,20 +153,30 @@ def test_find_nth_similar_word_oov_raises_not_found_error() -> None:
 
 def test_find_nth_similar_word_out_of_range_rank_raises_rank_error() -> None:
     provider = RankProvider(error=ProviderRankError("Rank exceeds vocabulary size."))
-    service = EmbeddingService(provider=provider)
+    service = EmbeddingService(nlp_resources=_resources(provider))
 
     with pytest.raises(EmbeddingRankError, match="Rank exceeds"):
         service.find_nth_similar_word("base", 11)
 
 
 def test_find_nth_similar_word_unsupported_provider_raises_inference_error() -> None:
-    service = EmbeddingService(provider=EchoProvider())
+    service = EmbeddingService(nlp_resources=_resources(EchoProvider()))
 
     with pytest.raises(EmbeddingInferenceError, match="does not support"):
         service.find_nth_similar_word("base", 1)
 
 
-def test_get_embedding_provider_propagates_model_load_failure(
+def test_embedding_service_accepts_provider_for_compatibility() -> None:
+    provider = EchoProvider()
+    service = EmbeddingService(provider=provider)
+
+    embeddings = service.generate_embeddings([" token "])
+
+    assert provider.last_inputs == ["token"]
+    assert embeddings.shape == (1, 2)
+
+
+def test_get_nlp_resources_propagates_model_load_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class BrokenFastTextProvider:
@@ -170,9 +185,9 @@ def test_get_embedding_provider_propagates_model_load_failure(
 
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fasttext")
     monkeypatch.setattr(services, "FastTextProvider", BrokenFastTextProvider)
-    services.get_embedding_provider.cache_clear()
+    services.get_nlp_resources.cache_clear()
 
     with pytest.raises(EmbeddingModelLoadError, match="model file not found"):
-        services.get_embedding_provider()
+        services.get_nlp_resources()
 
-    services.get_embedding_provider.cache_clear()
+    services.get_nlp_resources.cache_clear()
