@@ -14,11 +14,11 @@ from app.nlp.exceptions import EmbeddingOOVError as ProviderOOVError
 from app.nlp.exceptions import EmbeddingProviderError
 from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
 from app.nlp.fasttext import FastTextProvider
-from app.providers.base import EmbeddingProvider
-from app.providers.word2vec import (
+from app.nlp.word2vec import (
     Word2VecProvider,
     Word2VecProviderNotImplementedError,
 )
+from app.providers.base import EmbeddingProvider
 from app.utils import InputNormalizationError, normalize_texts
 
 logger = logging.getLogger(__name__)
