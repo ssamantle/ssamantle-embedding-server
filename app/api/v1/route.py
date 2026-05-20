@@ -8,7 +8,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from app.providers.exceptions import EmbeddingModelLoadError
+from app.nlp.exceptions import EmbeddingModelLoadError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -16,7 +16,7 @@ from app.services import (
     EmbeddingRankError,
     EmbeddingService,
     UnknownEmbeddingProviderError,
-    get_embedding_provider,
+    get_nlp_resources,
 )
 
 router = APIRouter()
@@ -64,7 +64,7 @@ def _elapsed_time_ms(started_at: float) -> float:
 
 def get_embedding_service() -> EmbeddingService:
     try:
-        provider = get_embedding_provider()
+        nlp_resources = get_nlp_resources()
     except EmbeddingModelLoadError as exc:
         raise HTTPException(
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
@@ -75,7 +75,7 @@ def get_embedding_service() -> EmbeddingService:
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
-    return EmbeddingService(provider=provider)
+    return EmbeddingService(nlp_resources=nlp_resources)
 
 
 @router.get(

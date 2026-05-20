@@ -10,14 +10,15 @@ import numpy as np
 
 from app.core.settings import settings
 from app.dto import EmbeddingResponseDTO
-from app.providers.base import EmbeddingProvider
-from app.providers.exceptions import (
-    EmbeddingOOVError as ProviderOOVError,
-    EmbeddingProviderError,
-    EmbeddingRankError as ProviderRankError,
+from app.nlp.base import EmbeddingProvider
+from app.nlp.exceptions import EmbeddingOOVError as ProviderOOVError
+from app.nlp.exceptions import EmbeddingProviderError
+from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
+from app.nlp.fasttext import FastTextProvider
+from app.nlp.word2vec import (
+    Word2VecProvider,
+    Word2VecProviderNotImplementedError,
 )
-from app.providers.fasttext import FastTextProvider
-from app.providers.word2vec import Word2VecProvider, Word2VecProviderNotImplementedError
 from app.utils import InputNormalizationError, normalize_texts
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,11 @@ class NthSimilarWordResult:
     vocabulary_size: int
 
 
+@dataclass(frozen=True)
+class NlpResources:
+    embedding_model: EmbeddingProvider
+
+
 def _resolve_provider_name() -> str:
     configured = getattr(settings, "embedding_provider", None)
     provider_name = configured or os.getenv("EMBEDDING_PROVIDER", "fasttext")
@@ -72,14 +78,14 @@ def _resolve_provider_name() -> str:
 
 
 @lru_cache(maxsize=1)
-def get_embedding_provider() -> EmbeddingProvider:
+def get_nlp_resources() -> NlpResources:
     provider_name = _resolve_provider_name()
-    logger.info("Resolving embedding provider provider=%s", provider_name)
+    logger.info("Resolving NLP resources embedding_model=%s", provider_name)
 
     if provider_name == "fasttext":
-        return FastTextProvider()
+        return NlpResources(embedding_model=FastTextProvider())
     if provider_name == "word2vec":
-        return Word2VecProvider()
+        return NlpResources(embedding_model=Word2VecProvider())
 
     raise UnknownEmbeddingProviderError(
         "Unsupported embedding provider: "
@@ -90,8 +96,12 @@ def get_embedding_provider() -> EmbeddingProvider:
 class EmbeddingService:
     """Service layer for embedding request normalization and inference."""
 
-    def __init__(self, provider: EmbeddingProvider) -> None:
-        self._provider = provider
+    def __init__(self, *, nlp_resources: NlpResources) -> None:
+        self._nlp_resources = nlp_resources
+
+    @property
+    def _embedding_model(self) -> EmbeddingProvider:
+        return self._nlp_resources.embedding_model
 
     def generate_embeddings(self, texts: list[str]) -> np.ndarray:
         """Normalize input and return embeddings as ndarray for internal processing."""
@@ -100,7 +110,7 @@ class EmbeddingService:
         logger.info("Generating embeddings input_count=%s", len(normalized_texts))
 
         try:
-            embeddings = self._provider.embed(normalized_texts)
+            embeddings = self._embedding_model.embed(normalized_texts)
         except ProviderOOVError as exc:
             logger.warning(
                 "Embedding lookup failed because a token is out of vocabulary"
@@ -143,7 +153,7 @@ class EmbeddingService:
         normalized_base_word = normalized_words[0]
         normalized_compared_word = normalized_words[1]
 
-        ranker = getattr(self._provider, "similarity_rank", None)
+        ranker = getattr(self._embedding_model, "similarity_rank", None)
         if ranker is None:
             raise EmbeddingInferenceError(
                 "Provider does not support similarity rank calculation."
@@ -197,7 +207,7 @@ class EmbeddingService:
 
         normalized_base_word = self._normalize_or_raise([base_word])[0]
 
-        finder = getattr(self._provider, "nth_similar_word", None)
+        finder = getattr(self._embedding_model, "nth_similar_word", None)
         if finder is None:
             raise EmbeddingInferenceError(
                 "Provider does not support nth similar word lookup."

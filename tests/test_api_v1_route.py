@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import route
 from app.main import app
-from app.providers.exceptions import EmbeddingModelLoadError
+from app.nlp.exceptions import EmbeddingModelLoadError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -538,15 +538,15 @@ def test_deprecated_endpoints_are_marked_in_openapi() -> None:
     )
 
 
-def test_model_loading_failure_in_dependency_returns_500(
+def test_model_loading_failure_in_dependency_returns_503(
     monkeypatch,
 ) -> None:
     app.dependency_overrides.clear()
 
-    def broken_provider():
+    def broken_nlp_resources():
         raise EmbeddingModelLoadError("FastText model file not found")
 
-    monkeypatch.setattr(route, "get_embedding_provider", broken_provider)
+    monkeypatch.setattr(route, "get_nlp_resources", broken_nlp_resources)
 
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/api/v1/embedding/hello")

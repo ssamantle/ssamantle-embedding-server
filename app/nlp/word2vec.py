@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from app.providers.base import EmbeddingProvider
+from app.nlp.base import EmbeddingProvider
 
 
 class Word2VecProviderNotImplementedError(NotImplementedError):
@@ -24,3 +24,9 @@ class Word2VecProvider(EmbeddingProvider):
 
     def embed(self, texts: list[str]) -> np.ndarray:
         raise Word2VecProviderNotImplementedError(self._reason)
+
+
+__all__ = [
+    "Word2VecProvider",
+    "Word2VecProviderNotImplementedError",
+]

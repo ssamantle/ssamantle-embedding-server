@@ -19,3 +19,12 @@ class EmbeddingOOVError(EmbeddingProviderError):
 
 class EmbeddingRankError(EmbeddingProviderError, ValueError):
     """Raised when a requested rank is outside the vocabulary range."""
+
+
+__all__ = [
+    "EmbeddingException",
+    "EmbeddingProviderError",
+    "EmbeddingModelLoadError",
+    "EmbeddingOOVError",
+    "EmbeddingRankError",
+]

@@ -13,3 +13,6 @@ class EmbeddingProvider(ABC):
     @abstractmethod
     def embed(self, texts: list[str]) -> "np.ndarray":
         """Return sentence embeddings as an array with shape (N, D)."""
+
+
+__all__ = ["EmbeddingProvider"]

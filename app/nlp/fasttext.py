@@ -9,8 +9,8 @@ from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_vectors
 
 from app.core.settings import settings
-from app.providers.base import EmbeddingProvider
-from app.providers.exceptions import (
+from app.nlp.base import EmbeddingProvider
+from app.nlp.exceptions import (
     EmbeddingModelLoadError,
     EmbeddingOOVError,
     EmbeddingProviderError,
@@ -215,3 +215,12 @@ class FastTextProvider(EmbeddingProvider):
             embeddings.shape[1],
         )
         return embeddings
+
+
+__all__ = [
+    "FastTextProvider",
+    "FastTextProviderError",
+    "FastTextModelLoadError",
+    "FastTextOOVError",
+    "FastTextRankError",
+]
