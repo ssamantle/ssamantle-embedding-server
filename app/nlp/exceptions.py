@@ -21,10 +21,30 @@ class EmbeddingRankError(EmbeddingProviderError, ValueError):
     """Raised when a requested rank is outside the vocabulary range."""
 
 
+class KiwiError(Exception):
+    """Base exception for Kiwi wrapper failures."""
+
+
+class KiwiConfigurationError(KiwiError, ValueError):
+    """Raised when Kiwi is configured with invalid local settings."""
+
+
+class KiwiInitializationError(KiwiError):
+    """Raised when the Kiwi analyzer cannot be imported or initialized."""
+
+
+class KiwiAnalysisError(KiwiError):
+    """Raised when Kiwi fails while analyzing text."""
+
+
 __all__ = [
     "EmbeddingException",
     "EmbeddingProviderError",
     "EmbeddingModelLoadError",
     "EmbeddingOOVError",
     "EmbeddingRankError",
+    "KiwiError",
+    "KiwiConfigurationError",
+    "KiwiInitializationError",
+    "KiwiAnalysisError",
 ]

@@ -40,6 +40,45 @@ def _resolve_fasttext_model_path() -> str:
     return str(model_path)
 
 
+def _resolve_optional_path(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    stripped = value.strip()
+    if not stripped:
+        return None
+
+    path = Path(stripped).expanduser()
+    if not path.is_absolute():
+        path = (PROJECT_ROOT / path).resolve()
+
+    return str(path)
+
+
+def _resolve_env_bool(name: str, default: bool) -> bool:
+    configured = os.getenv(name)
+    if configured is None:
+        return default
+
+    normalized = configured.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _resolve_env_int(name: str, default: int) -> int:
+    configured = os.getenv(name)
+    if configured is None:
+        return default
+
+    try:
+        return int(configured.strip())
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = PROJECT_NAME
@@ -47,6 +86,15 @@ class Settings:
     app_description: str = PROJECT_DESCRIPTION
     api_v1_prefix: str = "/api/v1"
     fasttext_model_path: str = _resolve_fasttext_model_path()
+    kiwi_model_path: str | None = _resolve_optional_path(os.getenv("KIWI_MODEL_PATH"))
+    kiwi_user_dictionary_path: str | None = _resolve_optional_path(
+        os.getenv("KIWI_USER_DICTIONARY_PATH")
+    )
+    kiwi_num_workers: int = _resolve_env_int("KIWI_NUM_WORKERS", -1)
+    kiwi_load_default_dict: bool = _resolve_env_bool("KIWI_LOAD_DEFAULT_DICT", True)
+    kiwi_integrate_allomorph: bool = _resolve_env_bool("KIWI_INTEGRATE_ALLOMORPH", True)
+    kiwi_model_type: str | None = os.getenv("KIWI_MODEL_TYPE")
+    kiwi_enabled_dialects: str = os.getenv("KIWI_ENABLED_DIALECTS", "standard")
 
 
 settings: Settings = Settings()
