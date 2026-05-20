@@ -10,16 +10,10 @@ import numpy as np
 
 from app.core.settings import settings
 from app.dto import EmbeddingResponseDTO
+from app.nlp.exceptions import EmbeddingOOVError as ProviderOOVError
+from app.nlp.exceptions import EmbeddingProviderError
+from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
 from app.providers.base import EmbeddingProvider
-from app.providers.exceptions import (
-    EmbeddingOOVError as ProviderOOVError,
-)
-from app.providers.exceptions import (
-    EmbeddingProviderError,
-)
-from app.providers.exceptions import (
-    EmbeddingRankError as ProviderRankError,
-)
 from app.providers.fasttext import FastTextProvider
 from app.providers.word2vec import (
     Word2VecProvider,

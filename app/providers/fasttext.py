@@ -9,13 +9,13 @@ from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_vectors
 
 from app.core.settings import settings
-from app.providers.base import EmbeddingProvider
-from app.providers.exceptions import (
+from app.nlp.exceptions import (
     EmbeddingModelLoadError,
     EmbeddingOOVError,
     EmbeddingProviderError,
     EmbeddingRankError,
 )
+from app.providers.base import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 

@@ -4,12 +4,12 @@ import numpy as np
 import pytest
 
 import app.services as services
-from app.providers.base import EmbeddingProvider
-from app.providers.exceptions import (
+from app.nlp.exceptions import (
     EmbeddingModelLoadError,
     EmbeddingOOVError,
 )
-from app.providers.exceptions import EmbeddingRankError as ProviderRankError
+from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
+from app.providers.base import EmbeddingProvider
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,

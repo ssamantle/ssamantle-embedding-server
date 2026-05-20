@@ -8,7 +8,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from app.providers.exceptions import EmbeddingModelLoadError
+from app.nlp.exceptions import EmbeddingModelLoadError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
