@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import route
 from app.main import app
-from app.nlp.exceptions import EmbeddingModelLoadError
+from app.nlp.exceptions import EmbeddingModelLoadError, KiwiInitializationError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -552,4 +552,22 @@ def test_model_loading_failure_in_dependency_returns_503(
         response = client.get("/api/v1/embedding/hello")
 
     assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+    app.dependency_overrides.clear()
+
+
+def test_kiwi_initialization_failure_in_dependency_returns_503(
+    monkeypatch,
+) -> None:
+    app.dependency_overrides.clear()
+
+    def broken_nlp_resources():
+        raise KiwiInitializationError("kiwipiepy is required")
+
+    monkeypatch.setattr(route, "get_nlp_resources", broken_nlp_resources)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/api/v1/embedding/hello")
+
+    assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+    assert response.json() == {"detail": "kiwipiepy is required"}
     app.dependency_overrides.clear()

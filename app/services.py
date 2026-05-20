@@ -12,9 +12,10 @@ from app.core.settings import settings
 from app.dto import EmbeddingResponseDTO
 from app.nlp.base import EmbeddingProvider
 from app.nlp.exceptions import EmbeddingOOVError as ProviderOOVError
-from app.nlp.exceptions import EmbeddingProviderError
+from app.nlp.exceptions import EmbeddingProviderError, KiwiError
 from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
 from app.nlp.fasttext import FastTextProvider
+from app.nlp.kiwi import KiwiAnalyzer
 from app.nlp.word2vec import (
     Word2VecProvider,
     Word2VecProviderNotImplementedError,
@@ -69,6 +70,7 @@ class NthSimilarWordResult:
 @dataclass(frozen=True)
 class NlpResources:
     embedding_model: EmbeddingProvider
+    kiwi_analyzer: KiwiAnalyzer | None = None
 
 
 def _resolve_provider_name() -> str:
@@ -77,13 +79,32 @@ def _resolve_provider_name() -> str:
     return str(provider_name).strip().lower()
 
 
+def _resolve_kiwi_enabled() -> bool:
+    configured = os.getenv("KIWI_ENABLED")
+    if configured is None:
+        return bool(getattr(settings, "kiwi_enabled", False))
+
+    normalized = configured.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
 @lru_cache(maxsize=1)
 def get_nlp_resources() -> NlpResources:
     provider_name = _resolve_provider_name()
-    logger.info("Resolving NLP resources embedding_model=%s", provider_name)
+    kiwi_enabled = _resolve_kiwi_enabled()
+    logger.info(
+        "Resolving NLP resources embedding_model=%s kiwi_enabled=%s",
+        provider_name,
+        kiwi_enabled,
+    )
 
     if provider_name == "fasttext":
-        return NlpResources(embedding_model=FastTextProvider())
+        embedding_model = FastTextProvider()
+        kiwi_analyzer = KiwiAnalyzer() if kiwi_enabled else None
+        return NlpResources(
+            embedding_model=embedding_model,
+            kiwi_analyzer=kiwi_analyzer,
+        )
     if provider_name == "word2vec":
         return NlpResources(embedding_model=Word2VecProvider())
 
@@ -103,6 +124,10 @@ class EmbeddingService:
     def _embedding_model(self) -> EmbeddingProvider:
         return self._nlp_resources.embedding_model
 
+    @property
+    def _kiwi_analyzer(self) -> KiwiAnalyzer | None:
+        return self._nlp_resources.kiwi_analyzer
+
     def generate_embeddings(self, texts: list[str]) -> np.ndarray:
         """Normalize input and return embeddings as ndarray for internal processing."""
         normalized_texts = self._normalize_or_raise(texts)
@@ -110,29 +135,29 @@ class EmbeddingService:
         logger.info("Generating embeddings input_count=%s", len(normalized_texts))
 
         try:
-            embeddings = self._embedding_model.embed(normalized_texts)
+            embeddings = self._generate_embeddings_with_fallback(normalized_texts)
+        except EmbeddingInferenceError:
+            raise
         except ProviderOOVError as exc:
             logger.warning(
                 "Embedding lookup failed because a token is out of vocabulary"
             )
             raise EmbeddingNotFoundError(str(exc)) from exc
-        except (EmbeddingProviderError, Word2VecProviderNotImplementedError) as exc:
+        except (
+            EmbeddingProviderError,
+            KiwiError,
+            Word2VecProviderNotImplementedError,
+        ) as exc:
             logger.exception("Embedding provider failed during inference")
             raise EmbeddingInferenceError(str(exc)) from exc
         except Exception as exc:  # defensive mapping for unforeseen provider errors
             logger.exception("Unexpected embedding provider error")
             raise EmbeddingInferenceError("Failed to generate embeddings.") from exc
 
-        if not isinstance(embeddings, np.ndarray):
-            raise EmbeddingInferenceError("Provider must return numpy.ndarray.")
-        if embeddings.ndim != 2:
-            raise EmbeddingInferenceError(
-                "Provider must return a 2D embedding matrix with shape (N, D)."
-            )
-        if embeddings.shape[0] != len(normalized_texts):
-            raise EmbeddingInferenceError(
-                "Embedding row count does not match input text count."
-            )
+        self._validate_embedding_matrix(
+            embeddings,
+            expected_rows=len(normalized_texts),
+        )
 
         result = embeddings.astype(np.float32, copy=False)
         elapsed = perf_counter() - started_at
@@ -262,9 +287,95 @@ class EmbeddingService:
         embeddings = self.generate_embeddings(texts)
         return self.assemble_response(embeddings)
 
+    def _generate_embeddings_with_fallback(self, texts: list[str]) -> np.ndarray:
+        if self._kiwi_analyzer is None:
+            return self._embedding_model.embed(texts)
+
+        vectors = [self._embed_single_text(text) for text in texts]
+        return np.vstack(vectors).astype(np.float32, copy=False)
+
+    def _embed_single_text(self, text: str) -> np.ndarray:
+        try:
+            return self._embed_single_text_direct(text)
+        except ProviderOOVError as exc:
+            if self._kiwi_analyzer is None:
+                raise
+
+            return self._embed_single_text_with_kiwi_fallback(text, exc)
+
+    def _embed_single_text_direct(self, text: str) -> np.ndarray:
+        embeddings = self._embedding_model.embed([text])
+        self._validate_embedding_matrix(embeddings, expected_rows=1)
+        return np.asarray(embeddings[0], dtype=np.float32)
+
+    def _embed_single_text_with_kiwi_fallback(
+        self,
+        text: str,
+        original_error: ProviderOOVError,
+    ) -> np.ndarray:
+        if self._kiwi_analyzer is None:
+            raise original_error
+
+        morphemes = [
+            token
+            for token in self._kiwi_analyzer.tokenize_forms(text)
+            if isinstance(token, str) and token.strip()
+        ]
+        if not morphemes:
+            raise original_error
+
+        logger.info(
+            "Falling back to Kiwi tokenization for embedding text=%s morpheme_count=%s",
+            text,
+            len(morphemes),
+        )
+
+        vectors: list[np.ndarray] = []
+        skipped_tokens: list[str] = []
+        for morpheme in morphemes:
+            try:
+                vectors.append(self._embed_single_text_direct(morpheme))
+            except ProviderOOVError:
+                skipped_tokens.append(morpheme)
+
+        if not vectors:
+            logger.warning(
+                "Kiwi fallback produced no in-vocabulary morphemes text=%s morphemes=%s",
+                text,
+                morphemes,
+            )
+            raise original_error
+
+        if skipped_tokens:
+            logger.info(
+                "Kiwi fallback skipped out-of-vocabulary morphemes text=%s skipped=%s",
+                text,
+                skipped_tokens,
+            )
+
+        matrix = np.vstack(vectors).astype(np.float32, copy=False)
+        return np.asarray(matrix.mean(axis=0, dtype=np.float32), dtype=np.float32)
+
     @staticmethod
     def _normalize_or_raise(texts: list[str]) -> list[str]:
         try:
             return normalize_texts(texts)
         except InputNormalizationError as exc:
             raise EmbeddingInputError(str(exc)) from exc
+
+    @staticmethod
+    def _validate_embedding_matrix(
+        embeddings: np.ndarray,
+        *,
+        expected_rows: int,
+    ) -> None:
+        if not isinstance(embeddings, np.ndarray):
+            raise EmbeddingInferenceError("Provider must return numpy.ndarray.")
+        if embeddings.ndim != 2:
+            raise EmbeddingInferenceError(
+                "Provider must return a 2D embedding matrix with shape (N, D)."
+            )
+        if embeddings.shape[0] != expected_rows:
+            raise EmbeddingInferenceError(
+                "Embedding row count does not match input text count."
+            )

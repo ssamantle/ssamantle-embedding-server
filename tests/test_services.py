@@ -8,6 +8,7 @@ from app.nlp.base import EmbeddingProvider
 from app.nlp.exceptions import (
     EmbeddingModelLoadError,
     EmbeddingOOVError,
+    KiwiInitializationError,
 )
 from app.nlp.exceptions import EmbeddingRankError as ProviderRankError
 from app.services import (
@@ -58,8 +59,43 @@ class RankProvider(EmbeddingProvider):
         return "similar", 0.75, 10
 
 
-def _resources(embedding_model: EmbeddingProvider) -> NlpResources:
-    return NlpResources(embedding_model=embedding_model)
+class KiwiAwareProvider(EmbeddingProvider):
+    def __init__(self) -> None:
+        self.embed_calls: list[list[str]] = []
+        self.vectors = {
+            "known": np.array([1.0, 2.0], dtype=np.float32),
+            "복합": np.array([1.0, 0.0], dtype=np.float32),
+            "어": np.array([0.0, 1.0], dtype=np.float32),
+            "부분": np.array([2.0, 0.0], dtype=np.float32),
+        }
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        self.embed_calls.append(texts)
+        token = texts[0]
+        if token not in self.vectors:
+            raise EmbeddingOOVError(f"Word is out-of-vocabulary: '{token}'")
+        return np.array([self.vectors[token]], dtype=np.float32)
+
+
+class StubKiwiAnalyzer:
+    def __init__(self, token_map: dict[str, list[str]]) -> None:
+        self.token_map = token_map
+        self.calls: list[str] = []
+
+    def tokenize_forms(self, text: str) -> list[str]:
+        self.calls.append(text)
+        return self.token_map[text]
+
+
+def _resources(
+    embedding_model: EmbeddingProvider,
+    *,
+    kiwi_analyzer: StubKiwiAnalyzer | None = None,
+) -> NlpResources:
+    return NlpResources(
+        embedding_model=embedding_model,
+        kiwi_analyzer=kiwi_analyzer,
+    )
 
 
 def test_generate_embeddings_normalizes_input_and_returns_float32() -> None:
@@ -85,6 +121,61 @@ def test_generate_embeddings_oov_raises_not_found_error() -> None:
 
     with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
         service.generate_embeddings(["unknown"])
+
+
+def test_generate_embeddings_with_kiwi_enabled_preserves_direct_hit() -> None:
+    provider = KiwiAwareProvider()
+    kiwi_analyzer = StubKiwiAnalyzer({"known": ["무시"]})
+    service = EmbeddingService(
+        nlp_resources=_resources(provider, kiwi_analyzer=kiwi_analyzer)
+    )
+
+    embeddings = service.generate_embeddings(["known"])
+
+    assert kiwi_analyzer.calls == []
+    assert provider.embed_calls == [["known"]]
+    assert np.allclose(embeddings, np.array([[1.0, 2.0]], dtype=np.float32))
+
+
+def test_generate_embeddings_with_kiwi_fallback_averages_morpheme_vectors() -> None:
+    provider = KiwiAwareProvider()
+    kiwi_analyzer = StubKiwiAnalyzer({"복합어": ["복합", "어"]})
+    service = EmbeddingService(
+        nlp_resources=_resources(provider, kiwi_analyzer=kiwi_analyzer)
+    )
+
+    embeddings = service.generate_embeddings(["복합어"])
+
+    assert kiwi_analyzer.calls == ["복합어"]
+    assert provider.embed_calls == [["복합어"], ["복합"], ["어"]]
+    assert np.allclose(embeddings, np.array([[0.5, 0.5]], dtype=np.float32))
+
+
+def test_generate_embeddings_with_kiwi_fallback_skips_oov_morphemes() -> None:
+    provider = KiwiAwareProvider()
+    kiwi_analyzer = StubKiwiAnalyzer({"부분복합어": ["부분", "없는", "어"]})
+    service = EmbeddingService(
+        nlp_resources=_resources(provider, kiwi_analyzer=kiwi_analyzer)
+    )
+
+    embeddings = service.generate_embeddings(["부분복합어"])
+
+    assert kiwi_analyzer.calls == ["부분복합어"]
+    assert provider.embed_calls == [["부분복합어"], ["부분"], ["없는"], ["어"]]
+    assert np.allclose(embeddings, np.array([[1.0, 0.5]], dtype=np.float32))
+
+
+def test_generate_embeddings_with_kiwi_fallback_raises_when_all_morphemes_are_oov() -> (
+    None
+):
+    provider = KiwiAwareProvider()
+    kiwi_analyzer = StubKiwiAnalyzer({"미등록어": ["없는", "토큰"]})
+    service = EmbeddingService(
+        nlp_resources=_resources(provider, kiwi_analyzer=kiwi_analyzer)
+    )
+
+    with pytest.raises(EmbeddingNotFoundError, match="out-of-vocabulary"):
+        service.generate_embeddings(["미등록어"])
 
 
 def test_calculate_similarity_rank_normalizes_input_and_returns_result() -> None:
@@ -178,6 +269,44 @@ def test_get_nlp_resources_propagates_model_load_failure(
     services.get_nlp_resources.cache_clear()
 
     with pytest.raises(EmbeddingModelLoadError, match="model file not found"):
+        services.get_nlp_resources()
+
+    services.get_nlp_resources.cache_clear()
+
+
+def test_get_nlp_resources_adds_kiwi_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    embedding_model = EchoProvider()
+    kiwi_analyzer = object()
+
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "fasttext")
+    monkeypatch.setenv("KIWI_ENABLED", "true")
+    monkeypatch.setattr(services, "FastTextProvider", lambda: embedding_model)
+    monkeypatch.setattr(services, "KiwiAnalyzer", lambda: kiwi_analyzer)
+    services.get_nlp_resources.cache_clear()
+
+    resources = services.get_nlp_resources()
+
+    assert resources.embedding_model is embedding_model
+    assert resources.kiwi_analyzer is kiwi_analyzer
+    services.get_nlp_resources.cache_clear()
+
+
+def test_get_nlp_resources_propagates_kiwi_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "fasttext")
+    monkeypatch.setenv("KIWI_ENABLED", "true")
+    monkeypatch.setattr(services, "FastTextProvider", EchoProvider)
+
+    def broken_kiwi_analyzer() -> None:
+        raise KiwiInitializationError("kiwipiepy is required")
+
+    monkeypatch.setattr(services, "KiwiAnalyzer", broken_kiwi_analyzer)
+    services.get_nlp_resources.cache_clear()
+
+    with pytest.raises(KiwiInitializationError, match="kiwipiepy is required"):
         services.get_nlp_resources()
 
     services.get_nlp_resources.cache_clear()

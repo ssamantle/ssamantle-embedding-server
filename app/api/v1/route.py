@@ -8,7 +8,11 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from app.nlp.exceptions import EmbeddingModelLoadError
+from app.nlp.exceptions import (
+    EmbeddingModelLoadError,
+    KiwiConfigurationError,
+    KiwiInitializationError,
+)
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,
@@ -66,6 +70,11 @@ def get_embedding_service() -> EmbeddingService:
     try:
         nlp_resources = get_nlp_resources()
     except EmbeddingModelLoadError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except (KiwiConfigurationError, KiwiInitializationError) as exc:
         raise HTTPException(
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
             detail=str(exc),

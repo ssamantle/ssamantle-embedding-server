@@ -86,6 +86,7 @@ class Settings:
     app_description: str = PROJECT_DESCRIPTION
     api_v1_prefix: str = "/api/v1"
     fasttext_model_path: str = _resolve_fasttext_model_path()
+    kiwi_enabled: bool = _resolve_env_bool("KIWI_ENABLED", False)
     kiwi_model_path: str | None = _resolve_optional_path(os.getenv("KIWI_MODEL_PATH"))
     kiwi_user_dictionary_path: str | None = _resolve_optional_path(
         os.getenv("KIWI_USER_DICTIONARY_PATH")
