@@ -9,10 +9,10 @@ from gensim.models import KeyedVectors
 from gensim.models.fasttext import load_facebook_vectors
 
 from app.core.settings import settings
-from app.providers.base import (
+from app.providers.base import EmbeddingProvider
+from app.providers.exceptions import (
     EmbeddingModelLoadError,
     EmbeddingOOVError,
-    EmbeddingProvider,
     EmbeddingProviderError,
     EmbeddingRankError,
 )

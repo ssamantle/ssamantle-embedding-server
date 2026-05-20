@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import route
 from app.main import app
-from app.providers.base import EmbeddingModelLoadError
+from app.providers.exceptions import EmbeddingModelLoadError
 from app.services import (
     EmbeddingInferenceError,
     EmbeddingInputError,

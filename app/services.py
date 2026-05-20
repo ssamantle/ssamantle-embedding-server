@@ -10,9 +10,12 @@ import numpy as np
 
 from app.core.settings import settings
 from app.dto import EmbeddingResponseDTO
-from app.providers.base import EmbeddingOOVError as ProviderOOVError
-from app.providers.base import EmbeddingProvider, EmbeddingProviderError
-from app.providers.base import EmbeddingRankError as ProviderRankError
+from app.providers.base import EmbeddingProvider
+from app.providers.exceptions import (
+    EmbeddingOOVError as ProviderOOVError,
+    EmbeddingProviderError,
+    EmbeddingRankError as ProviderRankError,
+)
 from app.providers.fasttext import FastTextProvider
 from app.providers.word2vec import Word2VecProvider, Word2VecProviderNotImplementedError
 from app.utils import InputNormalizationError, normalize_texts
