@@ -166,16 +166,6 @@ def test_find_nth_similar_word_unsupported_provider_raises_inference_error() -> 
         service.find_nth_similar_word("base", 1)
 
 
-def test_embedding_service_accepts_provider_for_compatibility() -> None:
-    provider = EchoProvider()
-    service = EmbeddingService(provider=provider)
-
-    embeddings = service.generate_embeddings([" token "])
-
-    assert provider.last_inputs == ["token"]
-    assert embeddings.shape == (1, 2)
-
-
 def test_get_nlp_resources_propagates_model_load_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

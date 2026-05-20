@@ -93,29 +93,10 @@ def get_nlp_resources() -> NlpResources:
     )
 
 
-def get_embedding_provider() -> EmbeddingProvider:
-    """Compatibility wrapper for callers that still resolve a provider directly."""
-    return get_nlp_resources().embedding_model
-
-
 class EmbeddingService:
     """Service layer for embedding request normalization and inference."""
 
-    def __init__(
-        self,
-        *,
-        nlp_resources: NlpResources | None = None,
-        provider: EmbeddingProvider | None = None,
-    ) -> None:
-        if nlp_resources is None and provider is None:
-            raise ValueError("Either nlp_resources or provider must be provided.")
-        if nlp_resources is not None and provider is not None:
-            raise ValueError("Provide either nlp_resources or provider, not both.")
-
-        if nlp_resources is None:
-            assert provider is not None
-            nlp_resources = NlpResources(embedding_model=provider)
-
+    def __init__(self, *, nlp_resources: NlpResources) -> None:
         self._nlp_resources = nlp_resources
 
     @property
